@@ -11,9 +11,8 @@ import connection from "@/app/config/db";
  * @description Register a user
  * @access public
  */
-
 export async function POST(request: NextRequest) {
-  var db;
+  let db;
   try {
     const body = await request.json();
 
@@ -24,14 +23,13 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
     db = await connection.getConnection();
     const { username, email, password } = body;
 
     // Check if the user already exists
-    const [existingUsers]: any = await connection.query(
-      `
-      SELECT * FROM User WHERE email = ?
-    `,
+    const [existingUsers]: any = await db.query(
+      `SELECT * FROM User WHERE email = ?`,
       [email]
     );
 
@@ -51,19 +49,14 @@ export async function POST(request: NextRequest) {
     const hashedPassword = await bcrypt.hash(password, salt);
 
     // Insert the new user into the database
-    await connection.query(
-      `
-      INSERT INTO User (name, email, password)
-      VALUES (?, ?, ?)
-    `,
-      [username, email, hashedPassword]
+    await db.query(
+      `INSERT INTO User (name, email, password, IS_Admin, IS_Super_Admin) VALUES (?, ?, ?, ?, ?)`,
+      [username, email, hashedPassword, false, false]
     );
 
     // Retrieve the newly created user
-    const [newUserResult]: any = await connection.query(
-      `
-      SELECT * FROM User WHERE email = ?
-    `,
+    const [newUserResult]: any = await db.query(
+      `SELECT * FROM User WHERE email = ?`,
       [email]
     );
 
@@ -73,12 +66,61 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+    const NewUser = newUserResult[0];
 
-    const newUser = newUserResult[0];
+    // Create favorite list
+    await db.query(`INSERT INTO Favorate (ID_User) VALUES (?)`, [
+      NewUser.ID_User,
+    ]);
+    const [listes]: any = await db.query(
+      `SELECT * FROM Favorate WHERE ID_User = ?`,
+      [NewUser.ID_User]
+    );
+
+    if (listes.length === 0) {
+      return NextResponse.json(
+        { message: "Error creating favorite list" },
+        { status: 400 }
+      );
+    }
+    const LISTE = listes[0];
+
+    // Update user with the favorite list ID
+    await db.query(`UPDATE User SET ID_FAVORATE_List = ? WHERE ID_User = ?`, [
+      LISTE.ID_FAVORATE_List,
+      NewUser.ID_User,
+    ]);
+
+    // Create toshop list
+    await db.query(`INSERT INTO ToShop_List_List (ID_User) VALUES (?)`, [
+      NewUser.ID_User,
+    ]);
+    const [toshope_liste]: any = await db.query(
+      `SELECT * FROM ToShop_List_List WHERE ID_User = ?`,
+      [NewUser.ID_User]
+    );
+
+    if (toshope_liste.length === 0) {
+      return NextResponse.json(
+        { message: "Error creating toshop list" },
+        { status: 400 }
+      );
+    }
+    const TOSHOPE_LISTE = toshope_liste[0];
+
+    // Update user with the toshop list ID
+    await db.query(
+      `UPDATE User SET ID_ToShop_List_List = ? WHERE ID_User = ?`,
+      [TOSHOPE_LISTE.ID_ToShop_List_List, NewUser.ID_User]
+    );
+
+    // Create JWT token
     const jwtPayloadUser: User_Token = {
-      id: newUser.id,
-      email: newUser.email,
-      name: newUser.name,
+      id: NewUser.ID_User,
+      email: NewUser.email,
+      name: NewUser.name,
+      ID_Toshop_List: TOSHOPE_LISTE.ID_ToShop_List_List,
+      ID_Favorate_List: LISTE.ID_FAVORATE_List,
     };
     const token = jeneratejwt(jwtPayloadUser);
 
@@ -97,6 +139,8 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   } finally {
-    db?.release();
+    if (db) {
+      db.release();
+    }
   }
 }

@@ -43,10 +43,11 @@ export async function POST(request: NextRequest) {
       const password: string = user.password;
 
       const jwtPayloadUser: User_Token = {
-        id: user.id,
+        id: user.ID_User,
         email: user.email,
-
         name: user.name,
+        ID_Toshop_List: user.ID_ToShop_List_List,
+        ID_Favorate_List: user.ID_FAVORATE_List,
       };
 
       const token = jeneratejwt(jwtPayloadUser);
